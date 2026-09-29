@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Android Audio Pipeline Simulator: Media Service to Audio HAL</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.25);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --system-server: #818cf8;
+      --audioserver: #34d399;
+      --hal: #fbbf24;
+      --kernel: #f87171;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 24px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    h1 {
+      font-size: 1.8rem;
+      background: linear-gradient(90deg, #38bdf8, #818cf8, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+    header p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .controls-panel {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      font-weight: 500;
+    }
+    .btn:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+      transform: translateY(-1px);
+    }
+    .btn-primary {
+      background: #0284c7;
+      border-color: #38bdf8;
+    }
+    .btn-primary:hover {
+      background: #0369a1;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 1300px;
+      margin: 0 auto;
+    }
+    @media (max-width: 900px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Stack Layers */
+    .stack-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .layer-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+    .layer-card.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 16px var(--accent-glow);
+      transform: scale(1.01);
+    }
+    .layer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .layer-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .layer-tag {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+      background: #334155;
+    }
+    .layer-desc {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .layer-ipc {
+      margin-top: 8px;
+      font-size: 0.75rem;
+      color: var(--accent);
+      font-family: monospace;
+      display: flex;
+      gap: 12px;
+    }
+
+    /* Terminal Console */
+    .terminal-container {
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      height: 600px;
+      overflow: hidden;
+    }
+    .terminal-header {
+      background: #111827;
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .terminal-body {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 0.78rem;
+      line-height: 1.4;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .log-line {
+      display: flex;
+      gap: 8px;
+      opacity: 0;
+      animation: fadeIn 0.25s forwards;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+    .log-time { color: #64748b; }
+    .log-pid { color: #94a3b8; }
+    .log-tag-system { color: var(--system-server); font-weight: 600; }
+    .log-tag-audio { color: var(--audioserver); font-weight: 600; }
+    .log-tag-hal { color: var(--hal); font-weight: 600; }
+    .log-tag-kernel { color: var(--kernel); font-weight: 600; }
+    .log-msg { color: #e2e8f0; }
+
+    /* Telemetry Bar */
+    .telemetry {
+      grid-column: 1 / -1;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 0.85rem;
+    }
+    .tele-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .tele-label { color: var(--text-muted); font-size: 0.75rem; }
+    .tele-val { font-weight: 600; color: var(--accent); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Android Audio Pipeline Simulator</h1>
+    <p>Simulating User Input Propagation: Media Service &rarr; Native Audio Daemons &rarr; Audio HAL &rarr; Kernel ALSA</p>
+  </header>
+
+  <div class="controls-panel">
+    <button class="btn btn-primary" id="btnPlay" onclick="triggerPlay()">▶ User Tap: Play Media</button>
+    <button class="btn" id="btnVolUp" onclick="triggerVolumeUp()">🔊 Volume Up (+)</button>
+    <button class="btn" id="btnHeadset" onclick="triggerRouteHeadset()">🎧 Route: Wired Headset</button>
+    <button class="btn" id="btnPause" onclick="triggerPause()">⏸ Pause Media</button>
+    <button class="btn" onclick="clearLogs()">🧹 Clear Console</button>
+  </div>
+
+  <div class="main-grid">
+    <!-- Stack Layers -->
+    <div class="stack-container">
+      <div class="layer-card" id="layerUser">
+        <div class="layer-header">
+          <span class="layer-title">1. User & Application Layer</span>
+          <span class="layer-tag">PID: 4210</span>
+        </div>
+        <p class="layer-desc">Touch screen event on UI &rarr; MediaController.getTransportControls().play() &rarr; AudioTrack.play()</p>
+        <div class="layer-ipc">
+          <span>Bridge: JNI (android_media_AudioTrack)</span>
+        </div>
+      </div>
+
+      <div class="layer-card" id="layerFramework">
+        <div class="layer-header">
+          <span class="layer-title">2. Framework Layer (system_server)</span>
+          <span class="layer-tag" style="color:var(--system-server);">PID: 1850</span>
+        </div>
+        <p class="layer-desc">InputDispatcher delivers touch &rarr; MediaSessionService receives playback command &rarr; AudioService evaluates Audio Focus</p>
+        <div class="layer-ipc">
+          <span>IPC: Android Binder (IAudioService)</span>
+        </div>
+      </div>
+
+      <div class="layer-card" id="layerNative">
+        <div class="layer-header">
+          <span class="layer-title">3. Native Daemons (/system/bin/audioserver)</span>
+          <span class="layer-tag" style="color:var(--audioserver);">PID: 910</span>
+        </div>
+        <p class="layer-desc">AudioPolicyManager selects routing profile (PRIMARY) &rarr; AudioFlinger allocates Ashmem & mixes active tracks</p>
+        <div class="layer-ipc">
+          <span>Control: Binder IPC</span>
+          <span>Data: Shared Memory (Ashmem)</span>
+        </div>
+      </div>
+
+      <div class="layer-card" id="layerHal">
+        <div class="layer-header">
+          <span class="layer-title">4. Audio HAL (android.hardware.audio.service)</span>
+          <span class="layer-tag" style="color:var(--hal);">PID: 840</span>
+        </div>
+        <p class="layer-desc">AIDL IStreamOut.write() &rarr; Vendor HAL (audio.primary.so) formats buffers and adjusts tinymix mixer paths</p>
+        <div class="layer-ipc">
+          <span>Control: AIDL Binder</span>
+          <span>Data: Fast Message Queue (FMQ)</span>
+        </div>
+      </div>
+
+      <div class="layer-card" id="layerKernel">
+        <div class="layer-header">
+          <span class="layer-title">5. Kernel Subsystem & Hardware</span>
+          <span class="layer-tag" style="color:var(--kernel);">Kernel</span>
+        </div>
+        <p class="layer-desc">tinyalsa pcm_write() issues SNDRV_PCM_IOCTL_WRITEI_FRAMES to /dev/snd/pcmC0D0p &rarr; DMA transfer to Audio DSP & DAC</p>
+        <div class="layer-ipc">
+          <span>Interface: ALSA Driver ioctls</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminal Console -->
+    <div class="terminal-container">
+      <div class="terminal-header">
+        <span>Android Logcat (adb logcat -v time)</span>
+        <span id="logCount">0 events</span>
+      </div>
+      <div class="terminal-body" id="logBody">
+        <div class="log-line" style="color: #64748b;">
+          [Android Audio Simulator Initialized - Press any control button to simulate message propagation]
+        </div>
+      </div>
+    </div>
+
+    <!-- Telemetry Bar -->
+    <div class="telemetry">
+      <div class="tele-item">
+        <span class="tele-label">Active Device</span>
+        <span class="tele-val" id="teleDevice">SPEAKER (0x2)</span>
+      </div>
+      <div class="tele-item">
+        <span class="tele-label">Stream Format</span>
+        <span class="tele-val">PCM 16-bit / 48000 Hz Stereo</span>
+      </div>
+      <div class="tele-item">
+        <span class="tele-label">Period Size</span>
+        <span class="tele-val">960 frames (20.0 ms)</span>
+      </div>
+      <div class="tele-item">
+        <span class="tele-label">Stream Volume</span>
+        <span class="tele-val" id="teleVol">1.00 (Index 10/15)</span>
+      </div>
+      <div class="tele-item">
+        <span class="tele-label">IPC Mechanism</span>
+        <span class="tele-val">Binder (Ctrl) / FMQ (Data)</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let logCounter = 0;
+    let streamInterval = null;
+    let currentVolume = 10;
+    let activeDevice = "SPEAKER (0x2)";
+
+    function getTime() {
+      const now = new Date();
+      return "09-28 " + now.toTimeString().split(" ")[0] + "." + String(now.getMilliseconds()).padStart(3, "0");
+    }
+
+    function addLog(pid, tid, level, tag, tagClass, msg) {
+      logCounter++;
+      document.getElementById("logCount").innerText = `${logCounter} events`;
+      const body = document.getElementById("logBody");
+      const line = document.createElement("div");
+      line.className = "log-line";
+      line.innerHTML = `
+        <span class="log-time">${getTime()}</span>
+        <span class="log-pid">${pid} ${tid}</span>
+        <span class="${tagClass}">${level} ${tag}:</span>
+        <span class="log-msg">${msg}</span>
+      `;
+      body.appendChild(line);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function setActiveLayer(layerId) {
+      document.querySelectorAll(".layer-card").forEach(c => c.classList.remove("active"));
+      if (layerId) {
+        document.getElementById(layerId).classList.add("active");
+      }
+    }
+
+    function triggerPlay() {
+      if (streamInterval) clearInterval(streamInterval);
+      
+      // Step 1: User & App Layer
+      setActiveLayer("layerUser");
+      addLog("1850", "2104", "D", "InputDispatcher", "log-tag-system", "Delivering touch to (com.example.musicplayer): action=ACTION_UP, x=540.0, y=1420.0");
+      addLog("4210", "4210", "I", "MediaSession", "log-tag-system", "dispatchMediaButtonEvent: KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_MEDIA_PLAY }");
+
+      // Step 2: Framework
+      setTimeout(() => {
+        setActiveLayer("layerFramework");
+        addLog("1850", "2450", "I", "AudioManager", "log-tag-system", "requestAudioFocus() from uid 10184 req=1 flags=0x0");
+        addLog("1850", "2450", "D", "AudioService", "log-tag-system", "requestAudioFocus: granted focus to android.media.AudioManager@48ac212");
+      }, 150);
+
+      // Step 3: Native Daemons
+      setTimeout(() => {
+        setActiveLayer("layerNative");
+        addLog("4210", "4280", "D", "AudioSystem", "log-tag-audio", "getOutputForAttr() usage=1 (USAGE_MEDIA) content=2 flags=0x4");
+        addLog(" 910", "1142", "I", "AudioPolicyManager", "log-tag-audio", "getOutputForAttr() profile: AUDIO_OUTPUT_FLAG_PRIMARY, out_handle: 13, device: " + activeDevice);
+        addLog(" 910", "1142", "I", "AudioFlinger", "log-tag-audio", "createTrack() sessionId 45, sampleRate 48000, out of MemoryDealer ashmem (size 32768 bytes)");
+        addLog(" 910", "1142", "I", "AudioPolicyManager", "log-tag-audio", "startOutput() output 13, stream 3, activeCount=1");
+      }, 350);
+
+      // Step 4: Audio HAL
+      setTimeout(() => {
+        setActiveLayer("layerHal");
+        addLog(" 910", "1142", "I", "AudioFlinger", "log-tag-audio", "openOutputStream() handle 13, device=" + activeDevice + ", flags=0x4");
+        addLog(" 840", "1012", "I", "audio.primary", "log-tag-hal", "adev_open_output_stream: rate 48000, fmt 0x1, channels 0x3, flags 0x4");
+        addLog(" 840", "1012", "D", "audio_hw_primary", "log-tag-hal", "apply_audio_route: applying card 0, path 'speaker-playback'");
+      }, 550);
+
+      // Step 5: Kernel & Steady State
+      setTimeout(() => {
+        setActiveLayer("layerKernel");
+        addLog(" 840", "1012", "I", "tinyalsa", "log-tag-kernel", "pcm_open: card=0 device=0 flags=0x10000002 (PCM_OUT)");
+        addLog(" 910", "1142", "I", "AudioFlinger", "log-tag-audio", "PlaybackThread 13 (MixerThread) starting threadLoop");
+        
+        // Start streaming data ticks
+        streamInterval = setInterval(() => {
+          setActiveLayer("layerHal");
+          addLog(" 910", "1290", "V", "AudioFlinger", "log-tag-audio", "MixerThread writing 3840 bytes to HAL via FMQ");
+          addLog(" 840", "1015", "D", "tinyalsa", "log-tag-kernel", "pcm_write: wrote 960 frames (3840 bytes) to ALSA /dev/snd/pcmC0D0p");
+        }, 1200);
+      }, 750);
+    }
+
+    function triggerVolumeUp() {
+      if (currentVolume < 15) currentVolume++;
+      const volRatio = (currentVolume / 15).toFixed(2);
+      document.getElementById("teleVol").innerText = `${volRatio} (Index ${currentVolume}/15)`;
+      
+      setActiveLayer("layerFramework");
+      addLog("1850", "2104", "D", "InputDispatcher", "log-tag-system", "Delivering key: KEYCODE_VOLUME_UP, action=ACTION_DOWN");
+      addLog("1850", "2450", "D", "AudioService", "log-tag-system", `adjustSuggestedStreamVolume: stream=3, direction=1 (index=${currentVolume})`);
+      
+      setTimeout(() => {
+        setActiveLayer("layerNative");
+        addLog(" 910", "1142", "I", "AudioPolicyManager", "log-tag-audio", `setStreamVolumeIndex() stream=3, index=${currentVolume}`);
+        addLog(" 910", "1142", "I", "AudioFlinger", "log-tag-audio", `setStreamVolume() stream=3, volume=${volRatio}, output=13`);
+      }, 100);
+
+      setTimeout(() => {
+        setActiveLayer("layerHal");
+        addLog(" 840", "1012", "D", "audio_hw_primary", "log-tag-hal", `out_set_volume: left=${volRatio}, right=${volRatio}`);
+      }, 200);
+    }
+
+    function triggerRouteHeadset() {
+      activeDevice = "WIRED_HEADSET (0x4)";
+      document.getElementById("teleDevice").innerText = activeDevice;
+      
+      setActiveLayer("layerFramework");
+      addLog("1850", "2450", "I", "WiredAccessoryManager", "log-tag-system", "Headset connected: state=1, name=headset");
+      addLog("1850", "2450", "D", "AudioDeviceBroker", "log-tag-system", "postSetWiredDeviceConnectionState: device=WIRED_HEADSET state=1");
+      
+      setTimeout(() => {
+        setActiveLayer("layerNative");
+        addLog(" 910", "1142", "I", "AudioPolicyManager", "log-tag-audio", "checkOutputForDevice() routing stream 3 to new device: AUDIO_DEVICE_OUT_WIRED_HEADSET");
+        addLog(" 910", "1142", "I", "AudioFlinger", "log-tag-audio", "PlaybackThread 13 setParameters('routing=4')");
+      }, 150);
+
+      setTimeout(() => {
+        setActiveLayer("layerHal");
+        addLog(" 840", "1012", "D", "audio_hw_primary", "log-tag-hal", "select_devices: switching route from speaker to 'headphone-playback'");
+        addLog(" 840", "1012", "I", "tinyalsa", "log-tag-kernel", "tinymix: set 'HP-L Switch' 1, 'HP-R Switch' 1");
+      }, 300);
+    }
+
+    function triggerPause() {
+      if (streamInterval) {
+        clearInterval(streamInterval);
+        streamInterval = null;
+      }
+      setActiveLayer("layerUser");
+      addLog("4210", "4210", "I", "MediaSession", "log-tag-system", "dispatchMediaButtonEvent: KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_MEDIA_PAUSE }");
+      
+      setTimeout(() => {
+        setActiveLayer("layerNative");
+        addLog("4210", "4280", "D", "AudioTrack", "log-tag-audio", "pause() track 125");
+        addLog(" 910", "1142", "I", "AudioPolicyManager", "log-tag-audio", "stopOutput() output 13, stream 3");
+        addLog(" 910", "1142", "I", "AudioFlinger", "log-tag-audio", "PlaybackThread 13: track 125 transitioning to PAUSED");
+      }, 150);
+
+      setTimeout(() => {
+        setActiveLayer("layerHal");
+        addLog(" 840", "1012", "I", "audio.primary", "log-tag-hal", "out_standby: powering down DAC, putting ALSA device in standby");
+        addLog(" 840", "1012", "I", "tinyalsa", "log-tag-kernel", "pcm_close: closed card 0 device 0");
+        setActiveLayer(null);
+      }, 350);
+    }
+
+    function clearLogs() {
+      document.getElementById("logBody").innerHTML = "";
+      logCounter = 0;
+      document.getElementById("logCount").innerText = "0 events";
+    }
+  </script>
+</body>
+</html>
