@@ -1,0 +1,51 @@
+--------- beginning of system
+09-28 21:40:30.102  1850  2104 D InputDispatcher: Delivering touch to (com.example.musicplayer/com.example.musicplayer.MainActivity): action=ACTION_UP, x=540.0, y=1420.0
+09-28 21:40:30.104  1850  2104 V WindowManager: Finished key/motion event delivery
+09-28 21:40:30.110  4210  4210 I MediaSession: dispatchMediaButtonEvent: KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_MEDIA_PLAY }
+09-28 21:40:30.112  4210  4210 D MediaSessionCompat: Handling Play request from UI controller
+
+--------- beginning of main
+09-28 21:40:30.115  1850  2450 I AudioManager: requestAudioFocus() from uid/pid 10184/4210 clientId=android.media.AudioManager@48ac212 callingPack=com.example.musicplayer req=1 flags=0x0
+09-28 21:40:30.118  1850  2450 D AudioService: requestAudioFocus: granted focus to android.media.AudioManager@48ac212
+09-28 21:40:30.120  4210  4280 D AudioTrack: AudioTrack::init(): flags=0x4, sampleRate=48000, format=0x1
+09-28 21:40:30.125  4210  4280 V AudioTrack: AudioTrack::set(): streamType -1, sampleRate 48000, format 0x1 (PCM_16), channelMask 0x3 (STEREO), frameCount 4096, flags 0x4
+09-28 21:40:30.126  4210  4280 D AudioSystem: getOutputForAttr() usage=1 (USAGE_MEDIA) content=2 (CONTENT_TYPE_MUSIC) flags=0x4 tags=
+09-28 21:40:30.128   910  1142 I AudioPolicyManager: getOutputForAttr() attributes={ content: MUSIC, usage: MEDIA, flags: 0x4 }
+09-28 21:40:30.130   910  1142 D AudioPolicyManager: getOutputForAttr() selected profile: AUDIO_OUTPUT_FLAG_PRIMARY, output handle: 13, device: AUDIO_DEVICE_OUT_SPEAKER (0x2)
+09-28 21:40:30.132   910  1142 I AudioFlinger: createTrack() sessionId 45, streamType 3, sampleRate 48000, format 0x1, channelMask 0x3, frameCount 4096, flags 0x4
+09-28 21:40:30.135   910  1142 D AudioFlinger: PlaybackThread::createTrack_l() allocated Track 125, name 4097, out of MemoryDealer ashmem buffer (size 32768 bytes)
+09-28 21:40:30.138  4210  4280 I AudioTrack: createTrack_l() successful: track 125, output 13, session 45
+09-28 21:40:30.142  4210  4280 D AudioTrack: start() track 125 [session 45]
+09-28 21:40:30.144  1850  2450 I PlayerBase: player 125 state changed to: STARTED (event=2)
+09-28 21:40:30.145   910  1142 I AudioPolicyManager: startOutput() output 13, stream 3, session 45
+09-28 21:40:30.146   910  1142 D AudioPolicyManager: startOutput() incrementing active track count on output 13 (count=1)
+
+--------- beginning of hal
+09-28 21:40:30.148   910  1142 I AudioFlinger: openOutputStream() handle 13, device 0x2 (AUDIO_DEVICE_OUT_SPEAKER), flags 0x4
+09-28 21:40:30.150   840  1012 I audio.primary.device: adev_open_output_stream: req_sample_rate 48000, fmt 0x1, channels 0x3, address '', flags 0x4
+09-28 21:40:30.152   840  1012 D audio_hw_primary: select_devices: output device: speaker (id: 2)
+09-28 21:40:30.154   840  1012 D audio_hw_primary: apply_audio_route: applying card 0, path 'speaker-playback'
+09-28 21:40:30.156   840  1012 I tinyalsa: pcm_open: card=0 device=0 flags=0x10000002 (PCM_OUT | PCM_MONOTONIC)
+09-28 21:40:30.158   840  1012 D tinyalsa: pcm_open: pcm_param config: channels=2, rate=48000, period_size=960, period_count=4
+09-28 21:40:30.160   910  1142 I AudioFlinger: PlaybackThread 13 (MixerThread) starting threadLoop
+
+--------- beginning of audio data plane (steady state streaming)
+09-28 21:40:30.180   910  1290 V AudioFlinger: PlaybackThread::threadLoop() waking up, mixing 1 active tracks
+09-28 21:40:30.181   910  1290 V AudioMixer: process__validate(): track 125, vol 1.000000, 1.000000, format PCM_16_BIT
+09-28 21:40:30.182   910  1290 D AudioFlinger: PlaybackThread 13 writing 3840 bytes to HAL via FMQ
+09-28 21:40:30.183   840  1015 V audio_hw_primary: out_write: stream=0x7b4a2000, bytes=3840
+09-28 21:40:30.184   840  1015 D tinyalsa: pcm_write: wrote 960 frames (3840 bytes) to ALSA device /dev/snd/pcmC0D0p
+09-28 21:40:30.200   910  1290 V AudioFlinger: PlaybackThread::threadLoop() cycle complete, sleep time = 19.8ms
+
+09-28 21:40:30.220   910  1290 V AudioFlinger: PlaybackThread::threadLoop() waking up, mixing 1 active tracks
+09-28 21:40:30.222   910  1290 D AudioFlinger: PlaybackThread 13 writing 3840 bytes to HAL via FMQ
+09-28 21:40:30.223   840  1015 V audio_hw_primary: out_write: stream=0x7b4a2000, bytes=3840
+09-28 21:40:30.224   840  1015 D tinyalsa: pcm_write: wrote 960 frames (3840 bytes) to ALSA device /dev/snd/pcmC0D0p
+09-28 21:40:30.240   910  1290 V AudioFlinger: PlaybackThread::threadLoop() cycle complete, sleep time = 19.9ms
+
+--------- user adjusts volume (volume key event)
+09-28 21:40:32.400  1850  2104 D InputDispatcher: Delivering key: KEYCODE_VOLUME_UP, action=ACTION_DOWN
+09-28 21:40:32.405  1850  2450 D AudioService: adjustSuggestedStreamVolume: stream=3, direction=1, flags=0x11
+09-28 21:40:32.408   910  1142 I AudioPolicyManager: setStreamVolumeIndex() stream=3, index=11, device=0x2
+09-28 21:40:32.410   910  1142 I AudioFlinger: setStreamVolume() stream=3, volume=0.720000, output=13
+09-28 21:40:32.412   840  1012 D audio_hw_primary: out_set_volume: left=0.720000, right=0.720000
